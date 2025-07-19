@@ -1,0 +1,9 @@
+{
+    "classification": "Analyze the following email and classify it into one of these categories: Work, Personal, Promotions, Spam. Return only the category name.\n\nSubject: {subject}\nFrom: {sender}\nBody: {body}",
+    "response": {
+        "Work": "Draft a professional, concise response for this email. Start with 'Hello,' and end with 'Best,'. Address the email's main points.\n\nSubject: {subject}\nBody: {body}",
+        "Personal": "Draft a friendly, concise response for this email. Start with 'Hi,' and end with 'Cheers,'. Address the email's main points.\n\nSubject: {subject}\nBody: {body}",
+        "Promotions": null,
+        "Spam": null
+    }
+}
