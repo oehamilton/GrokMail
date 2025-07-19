@@ -12,19 +12,15 @@ load_dotenv()
 
 # Configuration (from env vars)
 CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-TENANT_ID = os.getenv("TENANT_ID")
-EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamiLton)
 GROK_API_KEY = os.getenv("GROK_API_KEY")
+EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamilton)
 PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-4"  # Use Grok 4 for advanced reasoning
 
-# Use environment vars for CLIENT_ID, TENANT_ID (no CLIENT_SECRET for public client)
-
 AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
-SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  
+SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  # No offline_access; MSAL adds it automatically
 REDIRECT_URI = "http://localhost:8000"  # Match your Azure registration
 CACHE_FILE = "token_cache.json"  # For persisting tokens locally
 
@@ -64,30 +60,10 @@ def get_access_token():
     else:
         raise Exception(f"Authentication failed: {result.get('error_description')}")
 
-# For Lambda: Replace acquire_token_interactive with acquire_token_by_refresh_token
-# But initial refresh_token comes from local run; store it in Secrets Manager
-# Example for Lambda:
-# refresh_token = retrieve_from_secrets_manager()  # Implement this
-# result = app.acquire_token_by_refresh_token(refresh_token, SCOPES)
-
-""" # Microsoft Graph API Authentication (sync for simplicity)
-def get_access_token():
-    authority = f"https://login.microsoftonline.com/{TENANT_ID}"
-    app = msal.ConfidentialClientApplication(
-        CLIENT_ID,
-        authority=authority,
-        client_credential=CLIENT_SECRET
-    )
-    scopes = ["https://graph.microsoft.com/.default"]
-    result = app.acquire_token_for_client(scopes=scopes)
-    if "access_token" in result:
-        return result["access_token"]
-    else:
-        raise Exception(f"Authentication failed: {result.get('error_description')}") """
-
-# Load prompts (now with system/user separation and model option)
+# Load prompts (with backward compatibility for old format)
 def load_prompts():
     if not os.path.exists(PROMPT_FILE):
+        # Create default with new format
         default_prompts = {
             "model": DEFAULT_MODEL,
             "classification": {
@@ -114,10 +90,32 @@ def load_prompts():
         with open(PROMPT_FILE, "w", encoding="utf-8") as f:
             json.dump(default_prompts, f, indent=4)
         return default_prompts
+    
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        prompts = json.load(f)
+    
+    # Migrate old format if detected (classification is string)
+    if isinstance(prompts.get("classification"), str):
+        print("Migrating old prompt format to new system/user structure...")
+        old_class = prompts["classification"]
+        prompts["classification"] = {
+            "system": "You are a helpful email classifier. " + old_class.split("\n\n")[0],
+            "user": "\n\n".join(old_class.split("\n\n")[1:])
+        }
+        for cat, resp in prompts["response"].items():
+            if resp:
+                prompts["response"][cat] = {
+                    "system": "You are a helpful email responder. " + resp.split("\n\n")[0],
+                    "user": "\n\n".join(resp.split("\n\n")[1:])
+                }
+        prompts["model"] = DEFAULT_MODEL  # Add if missing
+        # Save migrated version
+        with open(PROMPT_FILE, "w", encoding="utf-8") as f:
+            json.dump(prompts, f, indent=4)
+    
+    return prompts
 
-# Async call to Grok API with retry
+# Async call to Grok API with retry (unchanged)
 async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=150, retries=3):
     headers = {
         "Authorization": f"Bearer {GROK_API_KEY}",
@@ -148,7 +146,7 @@ async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=1
             await asyncio.sleep(2 ** attempt)
     raise Exception("Grok API call failed after retries")
 
-# Get or create folder (sync)
+# Get or create folder (sync) (unchanged)
 def get_or_create_folder(access_token, folder_name):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     response = requests.get(f"{GRAPH_API_ENDPOINT}/me/mailFolders", headers=headers)
@@ -163,7 +161,7 @@ def get_or_create_folder(access_token, folder_name):
         return response.json()["id"]
     raise Exception(f"Failed to create folder {folder_name}")
 
-# Move email (sync)
+# Move email (sync) (unchanged)
 def move_email(access_token, message_id, folder_id):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {"destinationId": folder_id}
@@ -171,7 +169,7 @@ def move_email(access_token, message_id, folder_id):
     if response.status != 201:
         print(f"Failed to move email {message_id}")
 
-# Mark as read (sync)
+# Mark as read (sync) (unchanged)
 def mark_as_read(access_token, message_id):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {"isRead": True}
@@ -179,7 +177,7 @@ def mark_as_read(access_token, message_id):
     if response.status != 200:
         print(f"Failed to mark email {message_id} as read")
 
-# Create draft (sync)
+# Create draft (sync) (unchanged)
 def create_draft_email(access_token, subject, body, to_recipient):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {
@@ -196,7 +194,7 @@ def create_draft_email(access_token, subject, body, to_recipient):
     else:
         print(f"Failed to create draft")
 
-# Main async processor
+# Main async processor (unchanged)
 async def process_emails():
     access_token = get_access_token()
     prompts = load_prompts()
@@ -224,7 +222,7 @@ async def process_single_email(session, access_token, email, prompts, model):
     sender = email["from"]["emailAddress"]["address"]
     body = email["body"]["content"]
     print(f"Processing email: {subject} from {sender}")
-
+    
     # Classify
     class_system = prompts["classification"]["system"]
     class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body)
