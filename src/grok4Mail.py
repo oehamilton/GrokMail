@@ -16,12 +16,61 @@ CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TENANT_ID = os.getenv("TENANT_ID")
 EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamiLton)
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-PROMPT_FILE = "classification_prompts.txt"
+PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-4"  # Use Grok 4 for advanced reasoning
 
-# Microsoft Graph API Authentication (sync for simplicity)
+# Use environment vars for CLIENT_ID, TENANT_ID (no CLIENT_SECRET for public client)
+
+AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
+SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  
+REDIRECT_URI = "http://localhost:8000"  # Match your Azure registration
+CACHE_FILE = "token_cache.json"  # For persisting tokens locally
+
+# Create public client app
+app = msal.PublicClientApplication(
+    CLIENT_ID,
+    authority=AUTHORITY,
+    token_cache=msal.SerializableTokenCache()  # For caching
+)
+
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r") as f:
+            cache = app.token_cache
+            cache.deserialize(f.read())
+
+def save_cache():
+    with open(CACHE_FILE, "w") as f:
+        f.write(app.token_cache.serialize())
+
+def get_access_token():
+    load_cache()
+    accounts = app.get_accounts()
+    
+    if accounts:
+        # Silent refresh if token exists
+        result = app.acquire_token_silent(SCOPES, account=accounts[0])
+        if result:
+            save_cache()
+            return result["access_token"]
+    
+    # Interactive auth (opens browser, uses redirect_uri)
+    result = app.acquire_token_interactive(SCOPES, redirect_uri=REDIRECT_URI)
+    if "access_token" in result:
+        save_cache()
+        return result["access_token"]
+    else:
+        raise Exception(f"Authentication failed: {result.get('error_description')}")
+
+# For Lambda: Replace acquire_token_interactive with acquire_token_by_refresh_token
+# But initial refresh_token comes from local run; store it in Secrets Manager
+# Example for Lambda:
+# refresh_token = retrieve_from_secrets_manager()  # Implement this
+# result = app.acquire_token_by_refresh_token(refresh_token, SCOPES)
+
+""" # Microsoft Graph API Authentication (sync for simplicity)
 def get_access_token():
     authority = f"https://login.microsoftonline.com/{TENANT_ID}"
     app = msal.ConfidentialClientApplication(
@@ -34,7 +83,7 @@ def get_access_token():
     if "access_token" in result:
         return result["access_token"]
     else:
-        raise Exception(f"Authentication failed: {result.get('error_description')}")
+        raise Exception(f"Authentication failed: {result.get('error_description')}") """
 
 # Load prompts (now with system/user separation and model option)
 def load_prompts():
@@ -153,10 +202,10 @@ async def process_emails():
     prompts = load_prompts()
     model = prompts.get("model", DEFAULT_MODEL)
     
-    # Fetch unread emails (batch of 50)
+    # Fetch unread emails (batch of 1 for simplicity)
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     response = requests.get(
-        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=50",
+        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=1",
         headers=headers
     )
     if response.status != 200:
@@ -174,7 +223,8 @@ async def process_single_email(session, access_token, email, prompts, model):
     subject = email["subject"] or "No Subject"
     sender = email["from"]["emailAddress"]["address"]
     body = email["body"]["content"]
-    
+    print(f"Processing email: {subject} from {sender}")
+
     # Classify
     class_system = prompts["classification"]["system"]
     class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body)
