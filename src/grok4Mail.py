@@ -9,13 +9,11 @@ import msal
 import requests  # For sync auth, but async for API calls
 
 load_dotenv()
-print(f"Loaded CLIENT_ID: {os.getenv('CLIENT_ID')}")
-print(f"Loaded GROK_API_KEY: {os.getenv('GROK_API_KEY')}")
 
 # Configuration (from env vars)
 CLIENT_ID = os.getenv("CLIENT_ID")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-EMAIL_ADDRESS = "oehamiton@outlook.com"  # As provided; correct if typo (e.g., oehamilton)
+EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamilton)
 PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
@@ -151,38 +149,38 @@ async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=1
             await asyncio.sleep(2 ** attempt)
     raise Exception("Grok API call failed after retries")
 
-# Get or create folder (sync) (unchanged)
+# Get or create folder (sync)
 def get_or_create_folder(access_token, folder_name):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     response = requests.get(f"{GRAPH_API_ENDPOINT}/me/mailFolders", headers=headers)
-    if response.status == 200:
+    if response.status_code == 200:
         folders = response.json().get("value", [])
         for folder in folders:
             if folder["displayName"].lower() == folder_name.lower():
                 return folder["id"]
     data = {"displayName": folder_name}
     response = requests.post(f"{GRAPH_API_ENDPOINT}/me/mailFolders", headers=headers, json=data)
-    if response.status == 201:
+    if response.status_code == 201:
         return response.json()["id"]
     raise Exception(f"Failed to create folder {folder_name}")
 
-# Move email (sync) (unchanged)
+# Move email (sync)
 def move_email(access_token, message_id, folder_id):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {"destinationId": folder_id}
     response = requests.post(f"{GRAPH_API_ENDPOINT}/me/messages/{message_id}/move", headers=headers, json=data)
-    if response.status != 201:
+    if response.status_code != 201:
         print(f"Failed to move email {message_id}")
 
-# Mark as read (sync) (unchanged)
+# Mark as read (sync)
 def mark_as_read(access_token, message_id):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {"isRead": True}
     response = requests.patch(f"{GRAPH_API_ENDPOINT}/me/messages/{message_id}", headers=headers, json=data)
-    if response.status != 200:
+    if response.status_code != 200:
         print(f"Failed to mark email {message_id} as read")
 
-# Create draft (sync) (unchanged)
+# Create draft (sync)
 def create_draft_email(access_token, subject, body, to_recipient):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     data = {
@@ -194,12 +192,12 @@ def create_draft_email(access_token, subject, body, to_recipient):
         "saveToSentItems": False
     }
     response = requests.post(f"{GRAPH_API_ENDPOINT}/me/messages", headers=headers, json=data)
-    if response.status == 201:
+    if response.status_code == 201:
         print(f"Draft created for email from {to_recipient}")
     else:
         print(f"Failed to create draft")
 
-# Main async processor (unchanged)
+# Main async processor
 async def process_emails():
     access_token = get_access_token()
     prompts = load_prompts()
@@ -211,7 +209,7 @@ async def process_emails():
         f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=1",
         headers=headers
     )
-    if response.status != 200:
+    if response.status_code != 200:
         raise Exception("Failed to fetch emails")
     
     emails = response.json().get("value", [])
