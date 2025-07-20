@@ -9,11 +9,13 @@ import msal
 import requests  # For sync auth, but async for API calls
 
 load_dotenv()
+print(f"Loaded CLIENT_ID: {os.getenv('CLIENT_ID')}")
+print(f"Loaded GROK_API_KEY: {os.getenv('GROK_API_KEY')}")
 
 # Configuration (from env vars)
 CLIENT_ID = os.getenv("CLIENT_ID")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamilton)
+EMAIL_ADDRESS = "oehamiton@outlook.com"  # As provided; correct if typo (e.g., oehamilton)
 PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
@@ -21,7 +23,7 @@ DEFAULT_MODEL = "grok-4"  # Use Grok 4 for advanced reasoning
 
 AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
 SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  # No offline_access; MSAL adds it automatically
-REDIRECT_URI = "http://localhost:8000"  # Match your Azure registration
+REDIRECT_PORT = 8000  # Extracted port for fixed use; matches your registered http://localhost:8000
 CACHE_FILE = "token_cache.json"  # For persisting tokens locally
 
 # Create public client app
@@ -50,12 +52,15 @@ def get_access_token():
         result = app.acquire_token_silent(SCOPES, account=accounts[0])
         if result:
             save_cache()
+            print("Access token refreshed silently.")
             return result["access_token"]
     
-    # Interactive auth (opens browser, uses redirect_uri)
-    result = app.acquire_token_interactive(SCOPES, redirect_uri=REDIRECT_URI)
+    # Interactive auth (opens browser; uses http://localhost base with fixed port)
+    print("Starting interactive authentication...")
+    result = app.acquire_token_interactive(SCOPES, port=REDIRECT_PORT)
     if "access_token" in result:
         save_cache()
+        print("Interactive authentication successful.")
         return result["access_token"]
     else:
         raise Exception(f"Authentication failed: {result.get('error_description')}")

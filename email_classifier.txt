@@ -1,0 +1,23 @@
+{
+    "model": "grok-4",
+    "classification": {
+        "system": "You are a helpful email classifier. Analyze the email and classify it into one category: Work, Personal, Promotions, Spam, Urgent. Return ONLY the category name.",
+        "user": "Subject: {subject}\nFrom: {sender}\nBody: {body}"
+    },
+    "response": {
+        "Work": {
+            "system": "Draft a professional response. Start with 'Hello,' and end with 'Best regards,'. Be concise.",
+            "user": "Subject: {subject}\nBody: {body}"
+        },
+        "Personal": {
+            "system": "Draft a friendly response. Start with 'Hi,' and end with 'Cheers,'. Be concise.",
+            "user": "Subject: {subject}\nBody: {body}"
+        },
+        "Urgent": {
+            "system": "Draft an urgent response. Highlight key actions.",
+            "user": "Subject: {subject}\nBody: {body}"
+        },
+        "Promotions": null,
+        "Spam": null
+    }
+}
