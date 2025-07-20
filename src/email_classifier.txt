@@ -1,5 +1,5 @@
 {
-    "model": "grok-4",
+    "model": "grok-4-0709",
     "classification": {
         "system": "You are a helpful email classifier. Analyze the following email and classify it into one of these categories: Work, Personal, Promotions, Spam, Job. Return only the category name.",
         "user": "Subject: {subject}\nFrom: {sender}\nBody: {body}"

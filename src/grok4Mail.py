@@ -7,6 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import msal
 import requests  # For sync auth, but async for API calls
+import re  # For HTML stripping
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., o
 PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
-DEFAULT_MODEL = "grok-4"  # Use Grok 4 for advanced reasoning
+DEFAULT_MODEL = "grok-4"  # Updated to valid model name per xAI docs
 
 AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
 SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  # No offline_access; MSAL adds it automatically
@@ -70,7 +71,7 @@ def load_prompts():
         default_prompts = {
             "model": DEFAULT_MODEL,
             "classification": {
-                "system": "You are a helpful email classifier. Analyze the email and classify it into one category: Work, Personal, Promotions, Spam, Urgent. Return ONLY the category name.",
+                "system": "You are a helpful email classifier. Analyze the email content, ignoring any HTML or CSS formatting. Classify it into one category: Work, Personal, Promotions, Spam, Urgent. Return ONLY the category name.",
                 "user": "Subject: {subject}\nFrom: {sender}\nBody: {body}"
             },
             "response": {
@@ -118,7 +119,7 @@ def load_prompts():
     
     return prompts
 
-# Async call to Grok API with retry (unchanged)
+# Async call to Grok API with retry and debug
 async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=150, retries=3):
     headers = {
         "Authorization": f"Bearer {GROK_API_KEY}",
@@ -139,7 +140,12 @@ async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=1
             async with session.post(GROK_API_ENDPOINT, headers=headers, json=data, timeout=30) as response:
                 if response.status == 200:
                     resp_json = await response.json()
-                    return resp_json["choices"][0]["message"]["content"].strip()
+                    print(f"Debug: Full Grok API response: {json.dumps(resp_json, indent=2)}")  # Debug print
+                    if "choices" in resp_json and resp_json["choices"]:
+                        return resp_json["choices"][0]["message"]["content"].strip()
+                    else:
+                        print("Warning: No 'choices' in API response.")
+                        return None
                 else:
                     error = await response.text()
                     print(f"API error (attempt {attempt+1}): {error}")
@@ -149,19 +155,54 @@ async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=1
             await asyncio.sleep(2 ** attempt)
     raise Exception("Grok API call failed after retries")
 
-# Get or create folder (sync)
-def get_or_create_folder(access_token, folder_name):
+# Fetch all folders with pagination
+def fetch_all_folders(access_token, parent_id=None):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-    response = requests.get(f"{GRAPH_API_ENDPOINT}/me/mailFolders", headers=headers)
-    if response.status_code == 200:
-        folders = response.json().get("value", [])
+    url = f"{GRAPH_API_ENDPOINT}/me/mailFolders"
+    if parent_id:
+        url = f"{GRAPH_API_ENDPOINT}/me/mailFolders/{parent_id}/childFolders"
+    folders = []
+    while url:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            folders.extend(data.get("value", []))
+            url = data.get("@odata.nextLink")
+        else:
+            raise Exception("Failed to fetch folders")
+    return folders
+
+# Get Inbox ID
+def get_inbox_id(access_token):
+    folders = fetch_all_folders(access_token)
+    for folder in folders:
+        if folder["displayName"].lower() == "inbox":
+            return folder["id"]
+    raise Exception("Inbox folder not found")
+
+# Get or create folder as subfolder of Inbox
+def get_or_create_folder(access_token, folder_name):
+    if not folder_name:
+        folder_name = "Uncategorized"  # Default if empty
+        print("Warning: Category was empty; using 'Uncategorized' folder.")
+    inbox_id = get_inbox_id(access_token)
+    folders = fetch_all_folders(access_token, inbox_id)
+    print("Existing subfolders in Inbox:", [f["displayName"] for f in folders])  # Debug print
+    for folder in folders:
+        if folder["displayName"].lower() == folder_name.lower():
+            return folder["id"]
+    data = {"displayName": folder_name}
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    response = requests.post(f"{GRAPH_API_ENDPOINT}/me/mailFolders/{inbox_id}/childFolders", headers=headers, json=data)
+    if response.status_code == 201:
+        return response.json()["id"]
+    elif "ErrorFolderExists" in response.text:
+        # Re-fetch if exists error
+        folders = fetch_all_folders(access_token, inbox_id)
         for folder in folders:
             if folder["displayName"].lower() == folder_name.lower():
                 return folder["id"]
-    data = {"displayName": folder_name}
-    response = requests.post(f"{GRAPH_API_ENDPOINT}/me/mailFolders", headers=headers, json=data)
-    if response.status_code == 201:
-        return response.json()["id"]
+    print(f"Failed to create folder {folder_name}: {response.text}")  # Add debug for failure
     raise Exception(f"Failed to create folder {folder_name}")
 
 # Move email (sync)
@@ -170,7 +211,7 @@ def move_email(access_token, message_id, folder_id):
     data = {"destinationId": folder_id}
     response = requests.post(f"{GRAPH_API_ENDPOINT}/me/messages/{message_id}/move", headers=headers, json=data)
     if response.status_code != 201:
-        print(f"Failed to move email {message_id}")
+        print(f"Failed to move email {message_id}: {response.text}")  # Add debug
 
 # Mark as read (sync)
 def mark_as_read(access_token, message_id):
@@ -178,7 +219,7 @@ def mark_as_read(access_token, message_id):
     data = {"isRead": True}
     response = requests.patch(f"{GRAPH_API_ENDPOINT}/me/messages/{message_id}", headers=headers, json=data)
     if response.status_code != 200:
-        print(f"Failed to mark email {message_id} as read")
+        print(f"Failed to mark email {message_id} as read: {response.text}")  # Add debug
 
 # Create draft (sync)
 def create_draft_email(access_token, subject, body, to_recipient):
@@ -195,7 +236,7 @@ def create_draft_email(access_token, subject, body, to_recipient):
     if response.status_code == 201:
         print(f"Draft created for email from {to_recipient}")
     else:
-        print(f"Failed to create draft")
+        print(f"Failed to create draft: {response.text}")  # Add debug
 
 # Main async processor
 async def process_emails():
@@ -226,10 +267,19 @@ async def process_single_email(session, access_token, email, prompts, model):
     body = email["body"]["content"]
     print(f"Processing email: {subject} from {sender}")
     
+    # Clean HTML from body to make prompt cleaner
+    body_clean = re.sub(r'<[^>]+>', '', body).strip().replace('\n', ' ').replace('\r', ' ').strip()
+    body_clean = re.sub(r'\{[^}]*\}', '', body_clean)  # Remove CSS blocks
+    body_clean = ' '.join(body_clean.split())  # Remove extra whitespace
+    body_clean = body_clean[:500]  # Truncate aggressively to avoid token limit
+    
     # Classify
     class_system = prompts["classification"]["system"]
-    class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body)
-    category = await call_grok_api(session, class_system, class_user, model, max_tokens=50)
+    class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body_clean)
+    print(f"Class User Prompt: {class_user}")
+    category = await call_grok_api(session, class_system, class_user, model, max_tokens=512)  # Increased to allow for reasoning + output
+    
+    print(f"Debug: Returned category: {category}")  # Debug to see what was returned
     
     # Move to folder
     folder_id = get_or_create_folder(access_token, category)
@@ -241,7 +291,7 @@ async def process_single_email(session, access_token, email, prompts, model):
     response_prompt = prompts["response"].get(category)
     if response_prompt:
         resp_system = response_prompt["system"]
-        resp_user = response_prompt["user"].format(subject=subject, body=body)
+        resp_user = response_prompt["user"].format(subject=subject, body=body_clean)  # Use clean body for response too
         response_text = await call_grok_api(session, resp_system, resp_user, model)
         create_draft_email(access_token, subject, response_text, sender)
 
