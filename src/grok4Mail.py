@@ -1,3 +1,4 @@
+import sys
 import aiohttp
 import asyncio
 import json
@@ -276,7 +277,12 @@ async def process_single_email(session, access_token, email, prompts, model):
     # Classify
     class_system = prompts["classification"]["system"]
     class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body_clean)
+    print(f"Class System Prompt: {class_system}")
     print(f"Class User Prompt: {class_user}")
+    #Debug step to end or pause here so data being passed to the API can be verified
+    print(f"Debug: Classifying email with subject '{subject}' and body '{body_clean}'")
+   
+    sys.exit()  # Stop for debugging purposes
     category = await call_grok_api(session, class_system, class_user, model, max_tokens=512)  # Increased to allow for reasoning + output
     
     print(f"Debug: Returned category: {category}")  # Debug to see what was returned
