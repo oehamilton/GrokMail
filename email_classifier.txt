@@ -1,20 +1,20 @@
 {
-    "model": "grok-4",
+    "model": "grok-3",
     "classification": {
-        "system": "You are a helpful email classifier. Analyze the email and classify it into one category: Work, Personal, Promotions, Spam, Urgent. Return ONLY the category name.",
+        "system": "You are a helpful email classifier. Analyze the following email and classify it into one of these categories: Work, Bills Personal, Promotions, Spam, Jobs. Return only the category name. Many emails with technical job names in the subject or body are job related and should be classified as such; Example job titles contain: 'Senior Devloper','Software Engineer or Devloper', 'Full Stack', 'Genesys Developer'",
         "user": "Subject: {subject}\nFrom: {sender}\nBody: {body}"
     },
     "response": {
         "Work": {
-            "system": "Draft a professional response. Start with 'Hello,' and end with 'Best regards,'. Be concise.",
+            "system": "You are a helpful email responder. Draft a professional, concise response for this email. Start with 'Hello,' and end with 'Best,'. Address the email's main points.",
             "user": "Subject: {subject}\nBody: {body}"
         },
         "Personal": {
-            "system": "Draft a friendly response. Start with 'Hi,' and end with 'Cheers,'. Be concise.",
+            "system": "You are a helpful email responder. Draft a friendly, concise response for this email. Start with 'Hi,' and end with 'Cheers,'. Address the email's main points.",
             "user": "Subject: {subject}\nBody: {body}"
         },
-        "Urgent": {
-            "system": "Draft an urgent response. Highlight key actions.",
+        "Job": {
+            "system": "You are a helpful email responder. Draft a response to the job comparing to my software development skills.",
             "user": "Subject: {subject}\nBody: {body}"
         },
         "Promotions": null,

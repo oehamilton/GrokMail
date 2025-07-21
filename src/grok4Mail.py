@@ -20,7 +20,7 @@ EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., o
 PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
-DEFAULT_MODEL = "grok-4"  # Updated to valid model name per xAI docs
+DEFAULT_MODEL = "grok-4-0709"  # Updated to valid model name per xAI docs
 
 AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
 SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  # No offline_access; MSAL adds it automatically
@@ -70,6 +70,7 @@ def get_access_token():
 def load_prompts():
     if not os.path.exists(PROMPT_FILE):
         # Create default with new format
+        print("Prompt file not found, creating default prompts...")
         default_prompts = {
             "model": DEFAULT_MODEL,
             "classification": {
@@ -100,6 +101,7 @@ def load_prompts():
     with open(PROMPT_FILE, "r", encoding="utf-8") as f:
         prompts = json.load(f)
     
+    print(prompts)
     # Migrate old format if detected (classification is string)
     if isinstance(prompts.get("classification"), str):
         print("Migrating old prompt format to new system/user structure...")
@@ -245,11 +247,11 @@ async def process_emails():
     access_token = get_access_token()
     prompts = load_prompts()
     model = prompts.get("model", DEFAULT_MODEL)
-    
+    print(f"Using model: {model}")
     # Fetch unread emails (batch of 1 for simplicity)
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     response = requests.get(
-        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=1",
+        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=10",
         headers=headers
     )
     if response.status_code != 200:
@@ -293,18 +295,18 @@ async def process_single_email(session, access_token, email, prompts, model):
     
     # Move to folder
     folder_id = get_or_create_folder(access_token, category)
-    mark_as_read(access_token, message_id)
+    #mark_as_read(access_token, message_id)
     move_email(access_token, message_id, folder_id)
  
     print(f"Moved email '{subject}' to {category} folder")
     
     # Auto-draft if applicable
-    response_prompt = prompts["response"].get(category)
+"""     response_prompt = prompts["response"].get(category)
     if response_prompt:
         resp_system = response_prompt["system"]
         resp_user = response_prompt["user"].format(subject=subject, body=body_clean)  # Use clean body for response too
         response_text = await call_grok_api(session, resp_system, resp_user, model)
-        create_draft_email(access_token, subject, response_text, sender)
+        create_draft_email(access_token, subject, response_text, sender) """
 
 if __name__ == "__main__":
     try:
