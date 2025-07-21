@@ -21,7 +21,7 @@ PROMPT_FILE = "email_classifier.txt"
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-4-0709"  # Updated to valid model name per xAI docs
-
+BATCH_SIZE = 10  # For processing emails in batches
 AUTHORITY = "https://login.microsoftonline.com/common"  # 'common' for personal accounts
 SCOPES = ["https://graph.microsoft.com/Mail.ReadWrite", "https://graph.microsoft.com/Mail.Send", "https://graph.microsoft.com/User.Read"]  # No offline_access; MSAL adds it automatically
 REDIRECT_PORT = 8000  # Extracted port for fixed use; matches your registered http://localhost:8000
@@ -251,7 +251,7 @@ async def process_emails():
     # Fetch unread emails (batch of 1 for simplicity)
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     response = requests.get(
-        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=10",
+        f"{GRAPH_API_ENDPOINT}/me/mailFolders/inbox/messages?$filter=isRead eq false&$top={BATCH_SIZE}",
         headers=headers
     )
     if response.status_code != 200:
