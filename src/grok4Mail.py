@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import msal
 import requests  # For sync auth, but async for API calls
 import re  # For HTML stripping
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -141,7 +142,7 @@ async def call_grok_api(session, system_prompt, user_prompt, model, max_tokens=1
             async with session.post(GROK_API_ENDPOINT, headers=headers, json=data, timeout=30) as response:
                 if response.status == 200:
                     resp_json = await response.json()
-                    print(f"Debug: Full Grok API response: {json.dumps(resp_json, indent=2)}")  # Debug print
+                    #print(f"Debug: Full Grok API response: {json.dumps(resp_json, indent=2)}")  # Debug print
                     if "choices" in resp_json and resp_json["choices"]:
                         return resp_json["choices"][0]["message"]["content"].strip()
                     else:
@@ -267,30 +268,34 @@ async def process_single_email(session, access_token, email, prompts, model):
     sender = email["from"]["emailAddress"]["address"]
     body = email["body"]["content"]
     print(f"Processing email: {subject} from {sender}")
+    #print(f"Email body (raw): {body[:1000]}...")  # Print first 100 chars for debug
     
-    # Clean HTML from body to make prompt cleaner
-    body_clean = re.sub(r'<[^>]+>', '', body).strip().replace('\n', ' ').replace('\r', ' ').strip()
-    body_clean = re.sub(r'\{[^}]*\}', '', body_clean)  # Remove CSS blocks
-    body_clean = ' '.join(body_clean.split())  # Remove extra whitespace
-    body_clean = body_clean[:500]  # Truncate aggressively to avoid token limit
+    # Clean HTML from body to make prompt cleaner; most important for classification to avoid token overflow and provide better context
+    # Clean HTML from body using BeautifulSoup
+    soup = BeautifulSoup(body, 'lxml')  # Use 'lxml' parser for better performance
+    body_clean = soup.get_text(separator=' ').strip()  # Join text with single spaces, remove extra whitespace
+    body_clean = ' '.join(body_clean.split())  # Normalize whitespace
+    body_clean = body_clean[:500]  # Truncate to avoid token overflow
+    #print(f"Cleaned body (truncated): {body_clean[:500]}...")  # Print first 500 chars for debug
     
     # Classify
     class_system = prompts["classification"]["system"]
     class_user = prompts["classification"]["user"].format(subject=subject, sender=sender, body=body_clean)
-    print(f"Class System Prompt: {class_system}")
-    print(f"Class User Prompt: {class_user}")
+    #print(f"Class System Prompt: {class_system}")
+    #print(f"Class User Prompt: {class_user}")
     #Debug step to end or pause here so data being passed to the API can be verified
-    print(f"Debug: Classifying email with subject '{subject}' and body '{body_clean}'")
+    #print(f"Debug: Classifying email with subject '{subject}' and body '{body_clean}'")
    
-    sys.exit()  # Stop for debugging purposes
+    #sys.exit()  # Stop for debugging purposes
     category = await call_grok_api(session, class_system, class_user, model, max_tokens=512)  # Increased to allow for reasoning + output
     
-    print(f"Debug: Returned category: {category}")  # Debug to see what was returned
+    print(f"Debug: Returned category: {category} \n")  # Debug to see what was returned
     
     # Move to folder
     folder_id = get_or_create_folder(access_token, category)
-    move_email(access_token, message_id, folder_id)
     mark_as_read(access_token, message_id)
+    move_email(access_token, message_id, folder_id)
+ 
     print(f"Moved email '{subject}' to {category} folder")
     
     # Auto-draft if applicable
