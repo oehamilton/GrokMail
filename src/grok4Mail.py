@@ -16,8 +16,12 @@ load_dotenv()
 # Configuration (from env vars)
 CLIENT_ID = os.getenv("CLIENT_ID")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-EMAIL_ADDRESS = "oehamiton@hotmail.com"  # As provided; correct if typo (e.g., oehamilton)
-PROMPT_FILE = "email_classifier.txt"
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")  
+print(f"Using email address: {EMAIL_ADDRESS}")  # Debug print
+
+PROMPT_FILE = os.getenv("PROMPT_FILE")  
+print(f"Using prompt file: {PROMPT_FILE}")  # Debug print
+
 GRAPH_API_ENDPOINT = "https://graph.microsoft.com/v1.0"
 GROK_API_ENDPOINT = "https://api.x.ai/v1/chat/completions"
 DEFAULT_MODEL = "grok-4-0709"  # Updated to valid model name per xAI docs
