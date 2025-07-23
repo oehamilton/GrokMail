@@ -24,7 +24,8 @@ class MainWindow(QMainWindow):
     def run_script(self):
         try:
             # Replace 'your_script.py' with the path to your script
-            result = subprocess.run(['python', 'src\\grok4Mail.py'], capture_output=True, text=True)
+            # Added full path to the Python executable and script so the installed Python environment and modules are used
+            result = subprocess.run(['D:\\CODE\\SpaceDebris\\venv\\Scripts\\python.exe', 'D:\\CODE\\GrokMail\\src\\grok4Mail.py'], capture_output=True, text=True)
             print("Script Output:", result.stdout)
             if result.stderr:
                 print("Script Error:", result.stderr)
