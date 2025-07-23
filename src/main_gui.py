@@ -11,7 +11,7 @@ class MainWindow(QMainWindow):
         #set title color and background color
         # Set stylesheet for the main window and button
         self.setStyleSheet("""
-            QMainWindow {
+            QMainWindow { 
                 background-color: #2c3e50;
             }
             QPushButton {
