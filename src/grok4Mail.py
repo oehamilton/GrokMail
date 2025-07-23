@@ -281,7 +281,7 @@ async def process_single_email(session, access_token, email, prompts, model):
     soup = BeautifulSoup(body, 'lxml')  # Use 'lxml' parser for better performance
     body_clean = soup.get_text(separator=' ').strip()  # Join text with single spaces, remove extra whitespace
     body_clean = ' '.join(body_clean.split())  # Normalize whitespace
-    body_clean = body_clean[:500]  # Truncate to avoid token overflow
+    body_clean = body_clean.encode('utf-8', errors='replace').decode('utf-8')[:500]  # Truncate to avoid token overflow
     #print(f"Cleaned body (truncated): {body_clean[:500]}...")  # Print first 500 chars for debug
     
     # Classify
