@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
             python_path = sys.executable  # Gets the current Python interpreter (e.g., venv's python.exe)
             script_path = r"src\\grok4Mail.py"
             result = subprocess.run([python_path, script_path], capture_output=True, text=True, encoding='utf-8')
-            #result = subprocess.run(['D:\\CODE\\SpaceDebris\\venv\\Scripts\\python.exe', 'D:\\CODE\\GrokMail\\src\\grok4Mail.py'], capture_output=True, text=True)
+            #result = subprocess.run(['D:\\CODE\\GrokMail\\venv\\Scripts\\python.exe', 'D:\\CODE\\GrokMail\\src\\grok4Mail.py'], capture_output=True, text=True)
             print("Script Output:", result.stdout)
             if result.stderr:
                 print("Script Error:", result.stderr)
